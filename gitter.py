@@ -3,6 +3,8 @@ import sys
 import signal
 import subprocess
 
+
+# Colors class!!
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -13,25 +15,33 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+
+# Handle the Ctrl+C exiting
 def signal_handler(sig, frame):
     print(bcolors.WARNING  + "\nExited gracefully", bcolors.ENDC)
     sys.exit(0)
 
+
+# Checks if currently in Git repo
 def checkIfGit():
     if not os.path.exists("./.git"):
         print("Not a git repo dummy")
         sys.exit()
 
+
+# Main function for executing shell commands and returning the output
 def exec(cmd):
     r = subprocess.check_output(cmd, shell=True)
     return r.decode("utf-8")
 
+
+# Parse status
 def parseStatus(s):
     lines = s.splitlines()
     branx = lines[0]
     branx = branx[10:]
     temp_files = lines[7:lines.index("Untracked files:") - 1]
-    print(temp_files)
+    # print(temp_files)
     files = []
 
     for x in temp_files:
@@ -39,16 +49,18 @@ def parseStatus(s):
             files.append(x)
 
     untra = lines[lines.index('  (use "git add <file>..." to include in what will be committed)')+2:len(lines)-2]
-    print(untra)
+    # print(untra)
 
     for i in range(len(untra)):
         untra[i] = "created:" + untra[i]
 
     files.extend(untra)
-    print(files)
+    # print(files)
 
     return branx, files
 
+
+# Append the type of change in file
 def stylizeFile(str):
     str = str.split()
     if str[0] == "modified:":
@@ -60,6 +72,8 @@ def stylizeFile(str):
         str[1] = str[2]
     return str[0] + '\t' + str[1]
 
+
+# Print files in a nicely formatted way u_u
 def printFiles(b, f):
     print("\nCurrent branch:",bcolors.OKGREEN + b.upper() + bcolors.ENDC,"\n")
 
@@ -70,6 +84,8 @@ def printFiles(b, f):
     print("\n")
     print("Select which files you want to commit:")
 
+
+# Checks if in Git, executes 'git status', parses it, and returns it to main process
 def setup():
     checkIfGit()
     status = exec("git status")
@@ -77,7 +93,9 @@ def setup():
     printFiles(b, f)
     return b, f
 
-def parseIntSet(nputstr=""):
+
+# Parse numbers with patterns such as (1-3, >2, -3)
+def parseIntSet(nputstr, maxList):
     selection = set()
     invalid = set()
     tokens = [x.strip() for x in nputstr.split(',')]
@@ -85,6 +103,8 @@ def parseIntSet(nputstr=""):
     noAdd = False
     for i in tokens:
         if len(i) > 0:
+            if i == ".":
+                i = "0-%s"%(maxList)
             if i[:1] == "<":
                 i = "0-%s"%(i[1:])
             if i[:1] == "-":
@@ -111,33 +131,38 @@ def parseIntSet(nputstr=""):
         return None
     return selection
 
-def parseCmd(cmd):
-    if cmd.find("?") > -1:
+
+# Parse commands
+def parseCmd(cmd, files):
+    if cmd.find("chng") > -1:
         return None
     elif cmd == 'q':
-        print('Goodbye!\n')
+        print(bcolors.OKGREEN + 'Goodbye!\n', bcolors.ENDC)
         sys.exit()
     elif cmd == '':
         print(bcolors.FAIL + "Invalid entry: Empty", bcolors.ENDC);
         return None
     else:
-        return parseIntSet(cmd)
+        return parseIntSet(cmd, len(files) - 1)
 
+
+# Appends commit files in one line to feed to 'git add ...'
 def getCommits(f, fC):
     return (' '.join((f[i])[9:] for i in fC))
 
+
 def main():
 
-    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler) # Handle the Ctrl+C exit
 
-    branch, commitFiles = setup()
+    branch, commitFiles = setup() # Make sure in Git project, return branch and files
 
     filesC = None
     cmd_c = ''
 
     while filesC == None:
         cmd_add = input("$ ")
-        filesC = parseCmd(cmd_add)
+        filesC = parseCmd(cmd_add, commitFiles)
 
         for x in filesC:
             if (int(x) + 1 > len(commitFiles)):
