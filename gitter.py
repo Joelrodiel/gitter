@@ -1,5 +1,6 @@
 import os
 import sys
+import signal
 import subprocess
 
 class bcolors:
@@ -11,6 +12,10 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+
+def signal_handler(sig, frame):
+    print(bcolors.WARNING  + "\nExited gracefully", bcolors.ENDC)
+    sys.exit(0)
 
 def checkIfGit():
     if not os.path.exists("./.git"):
@@ -33,7 +38,7 @@ def parseStatus(s):
         if x[0:1] == "\t":
             files.append(x)
 
-    untra = lines[lines.index('  (use "git add <file>..." to include in what will be committed)')+2:len(lines)-1]
+    untra = lines[lines.index('  (use "git add <file>..." to include in what will be committed)')+2:len(lines)-2]
     print(untra)
 
     for i in range(len(untra)):
@@ -76,12 +81,20 @@ def parseIntSet(nputstr=""):
     selection = set()
     invalid = set()
     tokens = [x.strip() for x in nputstr.split(',')]
+    
+    noAdd = False
     for i in tokens:
         if len(i) > 0:
             if i[:1] == "<":
                 i = "0-%s"%(i[1:])
+            if i[:1] == "-":
+                selection.remove(int(i[1:]))
+                noAdd = True
         try:
-            selection.add(int(i))
+            if (not noAdd):
+                selection.add(int(i))
+            else:
+                noAdd = False
         except:
             try:
                 token = [int(k.strip()) for k in i.split('-')]
@@ -111,9 +124,12 @@ def parseCmd(cmd):
         return parseIntSet(cmd)
 
 def getCommits(f, fC):
-    return (' '.join((f[i])[9:] for i in range(len(fC))))
+    return (' '.join((f[i])[9:] for i in fC))
 
 def main():
+
+    signal.signal(signal.SIGINT, signal_handler)
+
     branch, commitFiles = setup()
 
     filesC = None
@@ -123,23 +139,31 @@ def main():
         cmd_add = input("$ ")
         filesC = parseCmd(cmd_add)
 
+        for x in filesC:
+            if (int(x) + 1 > len(commitFiles)):
+                filesC = None;
+                print(bcolors.FAIL + "Invalid entry: Out of range", bcolors.ENDC)
+
     print(bcolors.OKGREEN + "Adding files:", ', '.join(str(x) for x in filesC), bcolors.ENDC)
+
+    commitList = getCommits(commitFiles, filesC)
+
+    print("git add " + commitList)
+
+    committing = input("Want to commit? (y/n): ")
+
+    if committing == '':
+        committing = 'n'
+
+    if (committing == 'n' or committing == "N"):
+        print(bcolors.WARNING + "Make sure to commit your changes later!\n", bcolors.ENDC)
+        sys.exit()
 
     while cmd_c == '':
         cmd_c = input("Name of commit: ")
 
-    cmd_b = input("Branch name (" + branch + "): ")
-    if cmd_b != "":
-        branch = cmd_b
-
-    print(bcolors.OKGREEN + "Pushing to", branch, "branch", bcolors.ENDC);
-
-    cmd_w = input("Push where? (origin): ")
-    if cmd_w == "":
-        cmd_w = "origin"
-
-    commitList = getCommits(commitFiles, filesC)
-
-    os.system("git add " + commitList)
+    print(bcolors.OKGREEN + "Created new commit", cmd_c, bcolors.ENDC)
+    
+    print("git commit -m", cmd_c)
 
 main()
